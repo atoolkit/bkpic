@@ -8,8 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"unicode/utf8"
 
 	log "github.com/Sirupsen/logrus"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 const (
@@ -17,7 +20,7 @@ const (
 )
 
 var (
-	exiftoolFlags = []string{"-a", "-d", "%s", "-ee", "--ext", "json", "-fast2", "-G", "-j", "-q", "-r", "-sort"}
+	exiftoolFlags = []string{"-a", "-d", "%s", "-ee", "--ext", "json", "-fast2", "-G", "-j", "-L", "-q", "-r", "-sort"}
 )
 
 func newMedia(dir string) ([]*Medium, error) {
@@ -50,13 +53,31 @@ func newMedia(dir string) ([]*Medium, error) {
 		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
 			err = errors.New(bytes.NewBuffer(ee.Stderr).String())
 		}
-		log.Warn(err)
+		return nil, err
 	}
 	//exifFile = exifOut
 	// }
 
 	exifFile.Seek(0, 0)
-	d := json.NewDecoder(exifFile)
+	stat, err := exifFile.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	b := make([]byte, stat.Size())
+	_, err = exifFile.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	exifFile.Seek(0, 0)
+	var d *json.Decoder
+	if utf8.Valid(b) {
+		d = json.NewDecoder(exifFile)
+	} else {
+		r := transform.NewReader(exifFile, simplifiedchinese.GB18030.NewDecoder())
+		d = json.NewDecoder(r)
+	}
 
 	var media []*Medium
 	err = d.Decode(&media)
