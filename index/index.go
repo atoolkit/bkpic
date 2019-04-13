@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 type Detail struct {

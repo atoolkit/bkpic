@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"unicode/utf8"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 )

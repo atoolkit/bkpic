@@ -11,16 +11,57 @@ import (
 	"strings"
 	"time"
 
-	"./index"
-	"./windows"
+	"github.com/enjoypi/bkpic/index"
+	"github.com/enjoypi/bkpic/windows"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
 var (
 	usefulPattern, _ = regexp.Compile(`[^\w\s\.\:\/\-]+`)
-	uselessDirs      = map[string]bool{}
+	uselessDirs      = map[string]bool{
+		"照片":             true,
+		"手机照相":           true,
+		"个人":             true,
+		"视频":             true,
+		"贝贝":             true,
+		"妈妈爸爸":           true,
+		"贝贝手机视频":         true,
+		"手机9月5日导出":       true,
+		"扫描照片":           true,
+		"照片1":            true,
+		"妈妈手机照片":         true,
+		"来自：huawei a199": true,
+		"爷爷手机导出":         true,
+		"爸爸手机照片":         true,
+		"7-8月":           true,
+		"2013春节":         true,
+		"照片2":            true,
+		"新建文件夹":          true,
+		"2013国庆":         true,
+		"新建公文包":          true,
+		"2014春节":         true,
+		"14年":            true,
+		"ww手机照片":         true,
+		"本机照片":           true,
+		"8月":             true,
+		"9月":             true,
+		"家庭照片":           true,
+		"姜微":             true,
+		"成都照片":           true,
+		"姜蔚":             true,
+		"贝贝照片":           true,
+		"老照片":            true,
+		"2009春节":         true,
+		"2009年5月至7月照片":   true,
+		"姜":              true,
+		"2011.8贝贝":       true,
+		"小年2013-05":      true,
+		"2015年09月":       true,
+		"2015年08月":       true,
+		"2016年02月":       true,
+	}
 )
 
 func rootAction(c *cli.Context) error {
