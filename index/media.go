@@ -80,7 +80,10 @@ func newMedia(dir string) ([]*Medium, error) {
 	}
 
 	var media []*Medium
-	err = d.Decode(&media)
+	if err := d.Decode(&media); err != nil {
+		return nil, err
+	}
+
 	if len(media) <= 0 {
 		return nil, fmt.Errorf("%s has no media", absDir)
 	}
