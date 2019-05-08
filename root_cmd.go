@@ -175,7 +175,7 @@ func move(c *cli.Context, srcs []string, tgtDir string) error {
 					}
 					// 移动成功，结束
 					years[srcMedium.ShootingTime.Year()] = true
-					doneCount += 1
+					doneCount++
 					if !c.Bool("dry-run") {
 						os.Remove(absSrcPath)
 					}
@@ -244,8 +244,11 @@ func do(c *cli.Context, srcFileStat os.FileInfo, srcSha256, absSrcPath, absTgtPa
 		if c.Bool("dry-run") {
 			return nil, srcSha256
 		}
-		// // if err := os.Rename(absSrcPath, absTgtPath); err == nil {
-		err := windows.Move(absSrcPath, absTgtPath)
+		if c.Bool("move") {
+			err = windows.Move(absSrcPath, absTgtPath)
+		} else {
+			err = windows.Copy(absSrcPath, absTgtPath)
+		}
 		return err, srcSha256
 	}
 
