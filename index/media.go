@@ -1,18 +1,12 @@
 package index
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"unicode/utf8"
 
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 )
 
 const (
@@ -29,60 +23,28 @@ func newMedia(dir string) ([]*Medium, error) {
 		return nil, err
 	}
 
-	exifPath := absDir + "/.exif.json"
-	if _, err := os.Stat(exifPath); err == nil {
-		err := os.Remove(exifPath)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// exifFile, err := os.Open(exifPath)
-	// if err != nil {
-	exifFile, err := os.Create(absDir + "/" + ".exif.json")
-	if err != nil {
-		return nil, err
-	}
-	defer exifFile.Close()
-
 	args := append(exiftoolFlags, absDir)
 	cmd := exec.Command("exiftool", args...)
-	cmd.Stdout = exifFile
+	log.Info(args)
 
-	err = cmd.Run()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			err = errors.New(bytes.NewBuffer(ee.Stderr).String())
-		}
-		return nil, err
-	}
-	//exifFile = exifOut
-	// }
-
-	exifFile.Seek(0, 0)
-	stat, err := exifFile.Stat()
-	if err != nil {
-		return nil, err
+		log.Fatal(err)
 	}
 
-	b := make([]byte, stat.Size())
-	_, err = exifFile.Read(b)
-	if err != nil {
-		return nil, err
+	if err := cmd.Start(); err != nil {
+		log.Fatal(err)
 	}
 
-	exifFile.Seek(0, 0)
-	var d *json.Decoder
-	if utf8.Valid(b) {
-		d = json.NewDecoder(exifFile)
-	} else {
-		r := transform.NewReader(exifFile, simplifiedchinese.GB18030.NewDecoder())
-		d = json.NewDecoder(r)
-	}
-
+	decoder := json.NewDecoder(stdout)
 	var media []*Medium
-	if err := d.Decode(&media); err != nil {
+	if err := decoder.Decode(&media); err != nil {
 		log.Errorf("error when %d", len(media))
 		return nil, err
+	}
+
+	if err := cmd.Wait(); err != nil {
+		log.Fatal(err)
 	}
 
 	if len(media) <= 0 {
