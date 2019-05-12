@@ -176,9 +176,6 @@ func move(c *cli.Context, srcs []string, tgtDir string) error {
 					// 移动成功，结束
 					years[srcMedium.ShootingTime.Year()] = true
 					doneCount++
-					if !c.Bool("dry-run") {
-						os.Remove(absSrcPath)
-					}
 					break
 				}
 				nameChanged = true
