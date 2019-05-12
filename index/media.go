@@ -81,6 +81,7 @@ func newMedia(dir string) ([]*Medium, error) {
 
 	var media []*Medium
 	if err := d.Decode(&media); err != nil {
+		log.Errorf("error when %d", len(media))
 		return nil, err
 	}
 
