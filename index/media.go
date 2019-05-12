@@ -44,7 +44,7 @@ func newMedia(dir string) ([]*Medium, error) {
 	}
 
 	if err := cmd.Wait(); err != nil {
-		log.Fatal(err)
+		log.Warn(err)
 	}
 
 	if len(media) <= 0 {
