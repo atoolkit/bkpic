@@ -272,6 +272,9 @@ func do(c *cli.Context, srcFileStat os.FileInfo, srcSha256, absSrcPath, absTgtPa
 
 			if srcHash == tgtHash {
 				log.Infof("%s\t已经存在", absSrcPath)
+				if c.Bool("move") {
+					os.Remove(absSrcPath)
+				}
 				return nil, srcHash
 			}
 
