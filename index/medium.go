@@ -52,10 +52,6 @@ func (m *Medium) init(basepath string) {
 			log.Warn(err)
 		}
 		m.RelativePath = filepath.ToSlash(m.RelativePath)
-		m.SourceFile, err = filepath.Rel(basepath, m.SourceFile)
-		if err != nil {
-			log.Warn(err)
-		}
 		m.SourceFile = filepath.ToSlash(m.SourceFile)
 		m.ShootingTimeUnix = m.shootingTime()
 		m.ShootingTime = time.Unix(m.ShootingTimeUnix, 0)
@@ -95,6 +91,10 @@ func (m *Medium) shootingTime() int64 {
 
 	if m.FileModifyDate > validDataTime {
 		return m.FileModifyDate
+	}
+
+	if m.FileCreateDate > validDataTime {
+		return m.FileCreateDate
 	}
 	return 0
 }

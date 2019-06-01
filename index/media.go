@@ -14,7 +14,7 @@ const (
 )
 
 var (
-	exiftoolFlags = []string{"-a", "-d", "%s", "-ee", "--ext", "json", "-fast2", "-G", "-j", "-L", "-q", "-r", "-sort"}
+	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-fast2", "-G", "-j", "-L", "-q", "-r", "-sort"}
 )
 
 func newMedia(dir string) ([]*Medium, error) {
@@ -39,7 +39,7 @@ func newMedia(dir string) ([]*Medium, error) {
 	decoder := json.NewDecoder(stdout)
 	var media []*Medium
 	if err := decoder.Decode(&media); err != nil {
-		log.Errorf("error when %d", len(media))
+		log.Errorf("error when %d %s", len(media), media[len(media) - 1].SourceFile)
 		return nil, err
 	}
 
