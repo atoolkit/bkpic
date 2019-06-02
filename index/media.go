@@ -41,7 +41,7 @@ func newMedia(dir string) ([]*Medium, error) {
 	if err := decoder.Decode(&media); err != nil {
 		log.Errorf("error when %d", len(media))
 		if len(media) > 0{
-			log.Errorf("%s", len(media), media[len(media) - 1].SourceFile)
+			log.Errorf("%s", media[len(media) - 1].SourceFile)
 		}
 		return nil, err
 	}
