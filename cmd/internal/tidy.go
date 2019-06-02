@@ -16,7 +16,6 @@ import (
 )
 
 type TidyConfig struct {
-	Debug  bool
 	DryRun bool `mapstructure:"dry-run"`
 	Move   bool
 	Output string
@@ -136,11 +135,9 @@ func doTidy(c *TidyConfig, in string, out string) error {
 	if err != nil {
 		return err
 	}
-	if c.Debug {
-		media.Save()
-	}
 
 	files := media.Files()
+	count := 0
 	for _, src := range files {
 		m := media.Media[src]
 
@@ -149,11 +146,7 @@ func doTidy(c *TidyConfig, in string, out string) error {
 			continue
 		}
 
-		logrus.Info(src, "\t=>\t", out)
-		if c.DryRun {
-			continue
-		}
-
+		logrus.Debug(src, "\t=>\t", out)
 		var err error
 		for i := 1; i <= 10; i++ {
 			err = do(c, src, outDir, out)
@@ -169,8 +162,11 @@ func doTidy(c *TidyConfig, in string, out string) error {
 
 		if err != nil {
 			logrus.Warn(err, " in ", src)
+		} else {
+			count++
 		}
 	}
+	logrus.Infof("已完成。总文件：%d，成功：%d", len(files), count)
 	return nil
 }
 
@@ -218,6 +214,9 @@ func do(c *TidyConfig, src, outDir, out string) error {
 	outFileInfo, err := os.Stat(out)
 	// 目标文件不存在，直接移动
 	if os.IsNotExist(err) {
+		if c.DryRun {
+			return nil
+		}
 
 		if err := os.MkdirAll(outDir, os.FileMode(0700)); err != nil {
 			return err
@@ -258,7 +257,7 @@ func do(c *TidyConfig, src, outDir, out string) error {
 		return os.ErrExist
 	}
 
-	if c.Move {
+	if c.Move && !c.DryRun {
 		_ = os.Remove(src)
 	}
 	return nil

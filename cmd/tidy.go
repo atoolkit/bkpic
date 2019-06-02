@@ -21,7 +21,6 @@ var tidyCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(tidyCmd)
 	flags := tidyCmd.Flags()
-	flags.BoolP("debug", "d", false, "debug")
 	flags.BoolP("dry-run", "n", false, "perform a trial run with no changes made")
 	flags.BoolP("move", "m", false, "move")
 	flags.StringP("output", "o", "", "the output directory")
@@ -36,7 +35,7 @@ func tidy(v *viper.Viper, args [] string) error {
 		return err
 	}
 
-	logrus.Infof("settings on child: %+v", c)
+	logrus.Infof("settings on tidy: %+v", c)
 	logrus.Info("args: ", args)
 	return internal.Tidy(&c, args)
 }

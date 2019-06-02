@@ -39,7 +39,10 @@ func newMedia(dir string) ([]*Medium, error) {
 	decoder := json.NewDecoder(stdout)
 	var media []*Medium
 	if err := decoder.Decode(&media); err != nil {
-		log.Errorf("error when %d %s", len(media), media[len(media) - 1].SourceFile)
+		log.Errorf("error when %d", len(media))
+		if len(media) > 0{
+			log.Errorf("%s", len(media), media[len(media) - 1].SourceFile)
+		}
 		return nil, err
 	}
 
