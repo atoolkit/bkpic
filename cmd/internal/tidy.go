@@ -146,7 +146,7 @@ func doTidy(c *TidyConfig, in string, out string) error {
 			continue
 		}
 
-		logrus.Debug(src, "\t=>\t", out)
+		logrus.Trace(src, "\t=>\t", out)
 		var err error
 		for i := 1; i <= 10; i++ {
 			err = do(c, src, outDir, out)
@@ -154,8 +154,7 @@ func doTidy(c *TidyConfig, in string, out string) error {
 				ext := filepath.Ext(out)
 				out = strings.TrimSuffix(out, ext) + fmt.Sprintf("_%d", i) + ext
 				continue
-			}
-			if err != nil {
+			} else {
 				break
 			}
 		}
@@ -260,5 +259,6 @@ func do(c *TidyConfig, src, outDir, out string) error {
 	if c.Move && !c.DryRun {
 		_ = os.Remove(src)
 	}
+	logrus.Debugf("%s exists", out)
 	return nil
 }
