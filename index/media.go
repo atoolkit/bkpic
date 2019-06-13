@@ -14,7 +14,7 @@ const (
 )
 
 var (
-	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-fast2", "-G", "-j", "-L", "-q", "-r", "-sort"}
+	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-G", "-j", "-L", "-q", "-r", "-sort"}
 )
 
 func newMedia(dir string) ([]*Medium, error) {
@@ -40,10 +40,9 @@ func newMedia(dir string) ([]*Medium, error) {
 	var media []*Medium
 	if err := decoder.Decode(&media); err != nil {
 		log.Errorf("error when %d", len(media))
-		if len(media) > 0{
-			log.Errorf("%s", media[len(media) - 1].SourceFile)
+		if len(media) > 0 {
+			log.Errorf("%s", media[len(media)-1].SourceFile)
 		}
-		return nil, err
 	}
 
 	if err := cmd.Wait(); err != nil {
@@ -52,11 +51,6 @@ func newMedia(dir string) ([]*Medium, error) {
 
 	if len(media) <= 0 {
 		return nil, fmt.Errorf("%s has no media", absDir)
-	}
-
-	if err != nil {
-		log.Warn(err, " ", media[len(media)-1].SourceFile)
-		media = media[:len(media)-1]
 	}
 
 	for _, m := range media {
