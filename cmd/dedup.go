@@ -18,7 +18,7 @@ type dedupConfig struct {
 	DryRun bool `mapstructure:"dry-run"`
 }
 
-var files = make(map[string]string)
+var files = make(map[string][]string) // {hashValue, fileSlice}
 
 // doCmd represents the do command
 var dedupCmd = &cobra.Command{
@@ -63,7 +63,21 @@ func doDedup(c *dedupConfig, args []string) error {
 		return fmt.Errorf("%s is not directory", args[0])
 	}
 
-	return filepath.Walk(dir, walk)
+	if err := filepath.Walk(dir, walk); err != nil {
+		return err
+	}
+
+	for _, f := range files {
+		if len(f) <= 1 {
+			continue
+		}
+
+		for _, path := range f {
+			fmt.Println(path)
+		}
+		fmt.Println()
+	}
+	return nil
 }
 
 func walk(path string, info os.FileInfo, err error) error {
@@ -81,13 +95,15 @@ func walk(path string, info os.FileInfo, err error) error {
 		return err
 	}
 
-	if _, found := files[strHash]; found {
-		fmt.Printf("REM %s\n", files[strHash])
-		fmt.Printf("DEL %s\n\n", path)
-	} else {
-		files[strHash] = path
-	}
 	logrus.Trace(path)
+	_, found := files[strHash]
+	if found {
+	}
+
+	files[strHash] = append(files[strHash], path)
+	if found {
+		logrus.Debug(files[strHash])
+	}
 	return nil
 }
 
