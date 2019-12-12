@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/enjoypi/bkpic/index"
-	"github.com/enjoypi/bkpic/windows"
+	"github.com/enjoypi/bkpic/fs"
 	"github.com/sirupsen/logrus"
 )
 
@@ -222,10 +222,11 @@ func do(c *TidyConfig, src, outDir, out string) error {
 		}
 
 		if c.Move {
-			return windows.Move(src, out)
+
+			return fs.Move(src, out)
 		}
 
-		return windows.Copy(src, out)
+		return fs.Copy(src, out)
 	}
 
 	if err != nil {

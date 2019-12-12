@@ -1,4 +1,4 @@
-package windows
+package fs
 
 import (
 	"testing"
