@@ -2,20 +2,20 @@ package cmd
 
 import (
 	"github.com/enjoypi/bkpic/cmd/internal"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 // doCmd represents the do command
 var tidyCmd = &cobra.Command{
-	Use:   "tidy",
-	Short: "tidy media to output directory",
+	Use:     "tidy",
+	Short:   "tidy media to output directory",
 	PreRunE: preRunE,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return tidy(rootViper, args)
 	},
-	Args:cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(1),
 }
 
 func init() {
@@ -28,14 +28,13 @@ func init() {
 	_ = tidyCmd.MarkFlagRequired("output")
 }
 
-
-func tidy(v *viper.Viper, args [] string) error {
+func tidy(v *viper.Viper, args []string) error {
 	var c internal.TidyConfig
 	if err := v.Unmarshal(&c); err != nil {
 		return err
 	}
 
-	logrus.Infof("settings on tidy: %+v", c)
-	logrus.Info("args: ", args)
+	zap.S().Infof("settings on tidy: %+v", c)
+	zap.S().Info("args: ", args)
 	return internal.Tidy(&c, args)
 }

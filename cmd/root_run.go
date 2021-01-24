@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 // config for root
@@ -20,6 +20,6 @@ func run(v *viper.Viper) error {
 	if err := v.Unmarshal(&c); err != nil {
 		return err
 	}
-	logrus.Infof("settings: %+v", c)
+	zap.S().Infof("settings: %+v", c)
 	return nil
 }

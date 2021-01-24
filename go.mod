@@ -1,12 +1,13 @@
 module github.com/enjoypi/bkpic
 
-go 1.13
+go 1.15
 
 require (
-	github.com/coreos/etcd v3.3.18+incompatible
-	github.com/google/uuid v1.1.1 // indirect
-	github.com/sirupsen/logrus v1.4.2
-	github.com/spf13/cobra v0.0.5
-	github.com/spf13/viper v1.6.1
-	gopkg.in/yaml.v2 v2.2.7
+	github.com/corona10/goimagehash v1.0.3
+	github.com/enjoypi/gojob v0.0.0-20210120062315-66a1361e0c87
+	github.com/spf13/cobra v1.1.1
+	github.com/spf13/viper v1.7.1
+	go.uber.org/zap v1.10.0
+	golang.org/x/sys v0.0.0-20191026070338-33540a1f6037
+	gopkg.in/yaml.v2 v2.4.0
 )

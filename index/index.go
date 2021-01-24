@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 type Detail struct {
@@ -47,7 +47,7 @@ func NewIndex(dir string) (*Index, error) {
 func (i *Index) loadMetaInfos() {
 	media, err := newMedia(i.dir)
 	if err != nil {
-		log.Warn(err)
+		zap.S().Warn(err)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (i *Index) Add(medium *Medium) {
 	relPath := medium.SourceFile
 	if medium.Valid() {
 		if medium.ShootingTimeUnix <= 0 {
-			log.Warn("INVALID_TIME ", relPath)
+			zap.S().Warn("INVALID_TIME ", relPath)
 		}
 		i.Media[relPath] = medium
 	} else {
@@ -71,13 +71,13 @@ func (i *Index) Save() {
 	i.Size = len(i.Media)
 	data, err := json.MarshalIndent(i.Detail, "", "\t")
 	if err != nil {
-		log.Warn(err)
+		zap.S().Warn(err)
 		return
 	}
 
 	file, err := os.Create(i.indexFile)
 	if err != nil {
-		log.Warn(err)
+		zap.S().Warn(err)
 		return
 	}
 	defer file.Close()

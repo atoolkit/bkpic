@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
 const (
@@ -25,28 +25,28 @@ func newMedia(dir string) ([]*Medium, error) {
 
 	args := append(exiftoolFlags, absDir)
 	cmd := exec.Command("exiftool", args...)
-	log.Info(args)
+	zap.S().Info(args)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Fatal(err)
+		zap.S().Fatal(err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
+		zap.S().Fatal(err)
 	}
 
 	decoder := json.NewDecoder(stdout)
 	var media []*Medium
 	if err := decoder.Decode(&media); err != nil {
-		log.Errorf("error when %d", len(media))
+		zap.S().Errorf("error when %d", len(media))
 		if len(media) > 0 {
-			log.Errorf("%s", media[len(media)-1].SourceFile)
+			zap.S().Errorf("%s", media[len(media)-1].SourceFile)
 		}
 	}
 
 	if err := cmd.Wait(); err != nil {
-		log.Warn(err)
+		zap.S().Warn(err)
 	}
 
 	if len(media) <= 0 {

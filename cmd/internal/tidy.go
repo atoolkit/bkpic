@@ -10,9 +10,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/enjoypi/bkpic/index"
+	"go.uber.org/zap"
+
 	"github.com/enjoypi/bkpic/fs"
-	"github.com/sirupsen/logrus"
+	"github.com/enjoypi/bkpic/index"
 )
 
 type TidyConfig struct {
@@ -83,7 +84,7 @@ func Tidy(c *TidyConfig, inputs []string) error {
 	for _, in := range inputs {
 		input := filepath.Clean(in)
 		if err := doTidy(c, input, absOutput); err != nil {
-			logrus.Warn(err, " in ", input)
+			zap.S().Warn(err, " in ", input)
 		}
 	}
 	return nil
@@ -146,7 +147,7 @@ func doTidy(c *TidyConfig, in string, out string) error {
 			continue
 		}
 
-		logrus.Trace(src, "\t=>\t", out)
+		zap.S().Debug(src, "\t=>\t", out)
 		var err error
 		for i := 1; i <= 10; i++ {
 			err = do(c, src, outDir, out)
@@ -160,12 +161,12 @@ func doTidy(c *TidyConfig, in string, out string) error {
 		}
 
 		if err != nil {
-			logrus.Warn(err, " in ", src)
+			zap.S().Warn(err, " in ", src)
 		} else {
 			count++
 		}
 	}
-	logrus.Infof("已完成。总文件：%d，成功：%d", len(files), count)
+	zap.S().Infof("已完成。总文件：%d，成功：%d", len(files), count)
 	return nil
 }
 
@@ -260,6 +261,6 @@ func do(c *TidyConfig, src, outDir, out string) error {
 	if c.Move && !c.DryRun {
 		_ = os.Remove(src)
 	}
-	logrus.Debugf("%s exists", out)
+	zap.S().Debugf("%s exists", out)
 	return nil
 }
