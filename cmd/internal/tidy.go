@@ -1,14 +1,12 @@
 package internal
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -75,32 +73,54 @@ var (
 )
 
 func Tidy(c *TidyConfig, inputs []string) error {
-	absOutput, err := checkOutput(filepath.Clean(c.Output))
+	absOutput, err := filepath.Abs(c.Output)
 	if err != nil {
+		return err
+	}
+
+	if err := checkOutput(absOutput); err != nil {
 		return err
 	}
 	c.Output = absOutput
 
+	idx, err := index.NewIndex(absOutput)
+	if err != nil {
+		return err
+	}
+
 	for _, in := range inputs {
-		input := filepath.Clean(in)
-		if err := doTidy(c, input, absOutput); err != nil {
+		input, err := filepath.Abs(in)
+		if err != nil {
+			zap.L().Error("invalid file path", zap.Error(err))
+			continue
+		}
+
+		if err := doTidy(c, input, idx); err != nil {
 			zap.S().Warn(err, " in ", input)
 		}
 	}
 	return nil
 }
 
-func checkOutput(output string) (string, error) {
-	abs, err := filepath.Abs(output)
-	if err != nil {
-		return "", err
-	}
-	abs = filepath.ToSlash(abs)
+func checkOutput(output string) error {
 
-	if err := os.MkdirAll(abs, os.FileMode(0700)); err != nil {
-		return "", err
+	stat, err := os.Stat(output)
+	if stat == nil {
+		if err := os.MkdirAll(output, os.FileMode(0700)); err != nil {
+			return err
+		}
+		stat, err = os.Stat(output)
 	}
-	return abs, nil
+
+	if err != nil {
+		return err
+	}
+
+	if !stat.IsDir() {
+		return index.ErrNotDirectory
+	}
+
+	return nil
 }
 
 func checkInput(src string) (string, error) {
@@ -122,35 +142,51 @@ func checkInput(src string) (string, error) {
 	return abs, nil
 }
 
-func doTidy(c *TidyConfig, in string, out string) error {
+func doTidy(c *TidyConfig, in string, idx *index.Index) error {
 	absIn, err := checkInput(in)
 	if err != nil {
 		return err
 	}
 
-	if absIn == out {
-		return fmt.Errorf("input is same with output %s", out)
+	absOut := idx.AbsoluteDirectory()
+	if absIn == absOut {
+		return fmt.Errorf("input is same with output %s", absIn)
 	}
 
-	media, err := index.NewIndex(absIn)
-	if err != nil {
-		return err
-	}
-
-	files := media.Files()
-	count := 0
-	for _, src := range files {
-		m := media.Media[src]
-
-		out, outDir := getOutPath(m, out)
-		if out == src {
-			continue
+	var count int
+	walk := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
 
-		zap.S().Debug(src, "\t=>\t", out)
-		var err error
+		if info.IsDir() {
+			return nil
+		}
+
+		src := index.NewMedium(path)
+		if src == nil {
+			zap.L().Info("invalid medium", zap.String("file", path))
+			return nil
+		}
+
+		same := idx.Same(src)
+		if same != nil {
+			zap.L().Info("file already exists", zap.String("source", path), zap.String("same", same.AbsolutePath))
+			return nil
+		}
+
+		if !src.Valid() {
+			return index.ErrInvalidMedium
+		}
+
+		out, outDir := getOutPath(src, absOut)
+		if out == path {
+			return nil
+		}
+
+		zap.L().Info(fmt.Sprintf("%s\t=>\t%s", path, out))
 		for i := 1; i <= 10; i++ {
-			err = do(c, src, outDir, out)
+			err = do(c, path, outDir, out)
 			if err == os.ErrExist {
 				ext := filepath.Ext(out)
 				out = strings.TrimSuffix(out, ext) + fmt.Sprintf("_%d", i) + ext
@@ -161,57 +197,52 @@ func doTidy(c *TidyConfig, in string, out string) error {
 		}
 
 		if err != nil {
-			zap.S().Warn(err, " in ", src)
+			zap.S().Warn(err, " in ", path)
 		} else {
 			count++
 		}
+
+		return nil
 	}
+
+	if err := filepath.Walk(absIn, walk); err != nil {
+		return err
+	}
+
 	zap.S().Infof("已完成。总文件：%d，成功：%d", len(files), count)
 	return nil
 }
 
 func getOutPath(src *index.Medium, absTgt string) (string, string) {
-	tgtDir := fmt.Sprintf("%04d/%02d",
-		src.ShootingTime.Year(),
-		src.ShootingTime.Month())
+	if src.ShootingTime() <= 0 {
+		return "", ""
+	}
+
+	shooting := time.Unix(src.ShootingTime(), 0)
+	tgtDir := fmt.Sprintf("%04d/%02d", shooting.Year(), shooting.Month())
 
 	// match han
-	dirs := strings.Split(src.RelativePath, "/")
-	n := len(dirs)
-	if n > 0 {
-		for i := n - 1; i >= 0; i-- {
-			dir := dirs[i]
-			if ok := uselessDirs[strings.ToLower(dir)]; ok {
-				continue
-			}
-
-			if usefulPattern.MatchString(dir) {
-				tgtDir = tgtDir + "/" + dir
-				break
-			}
-		}
-	}
-	tgtPath := tgtDir + "/" + src.FileName
+	//dirs := strings.Split(src.RelativePath, "/")
+	//n := len(dirs)
+	//if n > 0 {
+	//	for i := n - 1; i >= 0; i-- {
+	//		dir := dirs[i]
+	//		if ok := uselessDirs[strings.ToLower(dir)]; ok {
+	//			continue
+	//		}
+	//
+	//		if usefulPattern.MatchString(dir) {
+	//			tgtDir = tgtDir + "/" + dir
+	//			break
+	//		}
+	//	}
+	//}
+	tgtPath := tgtDir + "/" + src.Base
 	return absTgt + "/" + tgtPath, absTgt + "/" + tgtDir
 }
 
-func sum256(filename string) (string, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
 func do(c *TidyConfig, src, outDir, out string) error {
-	outFileInfo, err := os.Stat(out)
+	_, err := os.Stat(out)
 	// 目标文件不存在，直接移动
 	if os.IsNotExist(err) {
 		if c.DryRun {
@@ -234,33 +265,8 @@ func do(c *TidyConfig, src, outDir, out string) error {
 		return err
 	}
 
-	srcFileInfo, err := os.Stat(src)
-	if err != nil {
-		return nil
-	}
-
-	// 目标文件存在则判断是否一致
-	if srcFileInfo.Size() != outFileInfo.Size() {
-		return os.ErrExist
-	}
-
-	srcHash, err := sum256(src)
-	if err != nil {
-		return err
-	}
-
-	outHash, err := sum256(out)
-	if err != nil {
-		return err
-	}
-
-	if srcHash != outHash {
-		return os.ErrExist
-	}
-
 	if c.Move && !c.DryRun {
 		_ = os.Remove(src)
 	}
-	zap.S().Debugf("%s exists", out)
 	return nil
 }

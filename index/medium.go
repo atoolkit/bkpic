@@ -2,10 +2,12 @@ package index
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"hash/adler32"
 	"image"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -21,12 +23,11 @@ const (
 )
 
 var (
+	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-G", "-j", "-L", "-q", "-r", "-sort"}
 	validDataTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
 )
 
-type Medium struct {
-	// meta info by exiftool
-	SourceFile     string
+type Meta struct {
 	Directory      string `json:"File:Directory"`
 	FileModifyDate int64  `json:"File:FileModifyDate"` // third
 	FileCreateDate int64  `json:"File:FileCreateDate"` // third
@@ -41,71 +42,127 @@ type Medium struct {
 
 	GPSLatitude  string `json:"Composite:GPSLatitude"`
 	GPSLongitude string `json:"Composite:GPSLongitude"`
+}
+
+type Medium struct {
+	// meta info by exiftool
+	meta *Meta
+	//SourceFile string
 
 	//
-	ShootingTime     time.Time
-	ShootingTimeUnix int64
-	Adler32          uint32
-	Sha              string
-	Size             int64
-	RelativePath     string
-	AbsolutePath     string
+	//ShootingTime     time.Time
+	//ShootingTimeUnix int64
+	Adler32 uint32
+	SHA256  []byte
+	//RelativePath     string
+	AbsolutePath string
+	Base         string
 	os.FileInfo
-	sha256    []byte
 	imageHash *goimagehash.ImageHash
 }
 
-func (m *Medium) init(basepath string) {
-	if m.Valid() {
-		var err error
-		m.RelativePath, err = filepath.Rel(basepath, m.Directory)
-		if err != nil {
-			zap.L().Error(err.Error())
-		}
-		m.RelativePath = filepath.ToSlash(m.RelativePath)
-		m.SourceFile = filepath.ToSlash(m.SourceFile)
-		m.ShootingTimeUnix = m.shootingTime()
-		m.ShootingTime = time.Unix(m.ShootingTimeUnix, 0)
+func NewMedium(filename string) *Medium {
+	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return nil
 	}
+
+	stat, err := os.Stat(abs)
+	if err != nil || stat == nil || stat.IsDir() || stat.Size() <= 0 {
+		return nil
+	}
+
+	base := filepath.Base(abs)
+	return &Medium{AbsolutePath: abs, Base: base, FileInfo: stat}
+}
+
+func (m *Medium) Meta() *Meta {
+	if m.meta != nil {
+		return m.meta
+	}
+
+	args := append(exiftoolFlags, m.AbsolutePath)
+	cmd := exec.Command("exiftool", args...)
+	zap.L().Debug(cmd.String())
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		zap.L().Error(err.Error())
+		return nil
+	}
+
+	decoder := json.NewDecoder(stdout)
+	var meta []Meta
+	if err := decoder.Decode(&meta); err != nil {
+		zap.L().Error(err.Error())
+		return nil
+	}
+
+	if err := cmd.Wait(); err != nil {
+		zap.L().Error(err.Error())
+		return nil
+	}
+
+	if len(meta) <= 0 {
+		zap.L().Info("invalid meta", zap.String("file", m.AbsolutePath))
+		return nil
+	}
+
+	m.meta = &meta[0]
+	return m.meta
 }
 
 func (m *Medium) Valid() bool {
-	return strings.HasPrefix(m.MIMEType, imagePrefix) ||
-		strings.HasPrefix(m.MIMEType, videoPrefix)
+	if m.Meta() == nil {
+		return false
+	}
+
+	return strings.HasPrefix(m.meta.MIMEType, imagePrefix) ||
+		strings.HasPrefix(m.meta.MIMEType, videoPrefix)
 }
 
-func (m *Medium) shootingTime() int64 {
-	if m.DateTimeOriginal > validDataTime {
-		return m.DateTimeOriginal
+func (m *Medium) ShootingTime() int64 {
+	meta := m.Meta()
+	if meta == nil {
+		return 0
 	}
 
-	if m.H264DateTimeOriginal > validDataTime {
-		return m.H264DateTimeOriginal
+	if meta.DateTimeOriginal > validDataTime {
+		return m.meta.DateTimeOriginal
 	}
 
-	if m.QTDateTime > validDataTime {
-		return m.QTDateTime
+	if meta.H264DateTimeOriginal > validDataTime {
+		return meta.H264DateTimeOriginal
 	}
 
-	if m.CreateDate > validDataTime {
-		return m.CreateDate
+	if meta.QTDateTime > validDataTime {
+		return meta.QTDateTime
 	}
 
-	timeFromFilename := extractTime(m.SourceFile)
+	if meta.CreateDate > validDataTime {
+		return meta.CreateDate
+	}
+
+	timeFromFilename := extractTime(m.Base)
 	if timeFromFilename > validDataTime {
 		return timeFromFilename
 	}
 
-	if m.FileModifyDate > m.FileCreateDate && m.FileCreateDate > validDataTime {
-		return m.FileCreateDate
+	if meta.FileModifyDate > meta.FileCreateDate && meta.FileCreateDate > validDataTime {
+		return meta.FileCreateDate
 	}
 
-	if m.FileModifyDate > validDataTime {
-		return m.FileModifyDate
+	if meta.FileModifyDate > validDataTime {
+		return meta.FileModifyDate
 	}
 
-	if m.FileCreateDate > validDataTime {
-		return m.FileCreateDate
+	if meta.FileCreateDate > validDataTime {
+		return meta.FileCreateDate
 	}
 	return 0
 }
@@ -142,6 +199,7 @@ func extractTime(filename string) int64 {
 	// return None, False
 	return 0
 }
+
 func (m *Medium) SumAdler32() {
 	if m.Adler32 > 0 {
 		return
@@ -184,7 +242,7 @@ func (m *Medium) SumSHA256() {
 		return
 	}
 
-	m.sha256 = h.Sum(nil)
+	m.SHA256 = h.Sum(nil)
 }
 
 func (m *Medium) PHash() error {
@@ -225,24 +283,27 @@ func (m *Medium) Same(other *Medium) bool {
 	other.SumAdler32()
 
 	if m.Adler32 != other.Adler32 {
-		return m.SameImage(other)
+		return m.sameImage(other)
 	}
 
 	m.SumSHA256()
 	other.SumSHA256()
-	if len(m.sha256) != len(other.sha256) {
-		return m.SameImage(other)
+	if len(m.SHA256) != len(other.SHA256) {
+		return m.sameImage(other)
 	}
 
-	for i := 0; i < len(m.sha256); i++ {
-		if m.sha256[i] != other.sha256[i] {
-			return m.SameImage(other)
+	for i := 0; i < len(m.SHA256); i++ {
+		if m.SHA256[i] != other.SHA256[i] {
+			return m.sameImage(other)
 		}
 	}
 	return true
 }
 
-func (m *Medium) SameImage(other *Medium) bool {
+func (m *Medium) sameImage(other *Medium) bool {
+	if m.ShootingTime() > 0 && other.ShootingTime() > 0 && m.ShootingTime() == other.ShootingTime() {
+		return true
+	}
 	//m.MagickWand()
 	//other.MagickWand()
 	//
