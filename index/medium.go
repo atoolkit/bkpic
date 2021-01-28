@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"hash/adler32"
 	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"os"
 	"os/exec"
@@ -28,17 +31,20 @@ var (
 )
 
 type Meta struct {
-	Directory      string `json:"File:Directory"`
-	FileModifyDate int64  `json:"File:FileModifyDate"` // third
-	FileCreateDate int64  `json:"File:FileCreateDate"` // third
-	FileName       string `json:"File:FileName"`
-	FileType       string `json:"File:FileType"`
-	MIMEType       string `json:"File:MIMEType"`
+	SourceFile string `json:SourceFile`
+	//Directory      string `json:"File:Directory"`
+	FileModifyDate int64 `json:"File:FileModifyDate"` // third
+	FileCreateDate int64 `json:"File:FileCreateDate"` // third
+	//FileName       string `json:"File:FileName"`
+	FileType string `json:"File:FileType"`
+	MIMEType string `json:"File:MIMEType"`
 
-	CreateDate           int64 `json:"EXIF:CreateDate"`           // second
-	DateTimeOriginal     int64 `json:"EXIF:DateTimeOriginal"`     // first
-	H264DateTimeOriginal int64 `json:"H264:DateTimeOriginal"`     // DateTime for h264
-	QTDateTime           int64 `json:"QuickTime:MediaCreateDate"` // DateTime for QuickTime
+	EXIFCreateDate       int64  `json:"EXIF:CreateDate"` // second
+	EXIFModifyDate       int64  `json:"EXIF:ModifyDate"`
+	DateTimeOriginal     int64  `json:"EXIF:DateTimeOriginal"`     // first
+	H264DateTimeOriginal int64  `json:"H264:DateTimeOriginal"`     // DateTime for h264
+	QTDateTime           int64  `json:"QuickTime:MediaCreateDate"` // DateTime for QuickTime
+	XMPPhotoId           string `json:"XMP:PhotoId"`
 
 	GPSLatitude  string `json:"Composite:GPSLatitude"`
 	GPSLongitude string `json:"Composite:GPSLongitude"`
@@ -47,16 +53,13 @@ type Meta struct {
 type Medium struct {
 	// meta info by exiftool
 	meta *Meta
-	//SourceFile string
 
 	//
 	//ShootingTime     time.Time
 	//ShootingTimeUnix int64
-	Adler32 uint32
-	SHA256  []byte
-	//RelativePath     string
-	AbsolutePath string
-	Base         string
+	Adler32  uint32
+	SHA256   []byte
+	FullPath string
 	os.FileInfo
 	imageHash *goimagehash.ImageHash
 }
@@ -72,8 +75,7 @@ func NewMedium(filename string) *Medium {
 		return nil
 	}
 
-	base := filepath.Base(abs)
-	return &Medium{AbsolutePath: abs, Base: base, FileInfo: stat}
+	return &Medium{FullPath: abs, FileInfo: stat}
 }
 
 func (m *Medium) Meta() *Meta {
@@ -81,7 +83,7 @@ func (m *Medium) Meta() *Meta {
 		return m.meta
 	}
 
-	args := append(exiftoolFlags, m.AbsolutePath)
+	args := append(exiftoolFlags, m.FullPath)
 	cmd := exec.Command("exiftool", args...)
 	zap.L().Debug(cmd.String())
 
@@ -97,7 +99,7 @@ func (m *Medium) Meta() *Meta {
 	}
 
 	decoder := json.NewDecoder(stdout)
-	var meta []Meta
+	var meta []*Meta
 	if err := decoder.Decode(&meta); err != nil {
 		zap.L().Error(err.Error())
 		return nil
@@ -109,11 +111,11 @@ func (m *Medium) Meta() *Meta {
 	}
 
 	if len(meta) <= 0 {
-		zap.L().Info("invalid meta", zap.String("file", m.AbsolutePath))
+		zap.L().Info("invalid meta", zap.String("file", m.FullPath))
 		return nil
 	}
 
-	m.meta = &meta[0]
+	m.meta = meta[0]
 	return m.meta
 }
 
@@ -144,11 +146,11 @@ func (m *Medium) ShootingTime() int64 {
 		return meta.QTDateTime
 	}
 
-	if meta.CreateDate > validDataTime {
-		return meta.CreateDate
+	if meta.EXIFCreateDate > validDataTime {
+		return meta.EXIFCreateDate
 	}
 
-	timeFromFilename := extractTime(m.Base)
+	timeFromFilename := extractTime(m.FileInfo.Name())
 	if timeFromFilename > validDataTime {
 		return timeFromFilename
 	}
@@ -205,7 +207,7 @@ func (m *Medium) SumAdler32() {
 		return
 	}
 
-	file, err := os.Open(m.AbsolutePath)
+	file, err := os.Open(m.FullPath)
 	if err != nil {
 		zap.L().Error("open file", zap.Error(err))
 		return
@@ -229,7 +231,7 @@ func (m *Medium) SumAdler32() {
 }
 
 func (m *Medium) SumSHA256() {
-	file, err := os.Open(m.AbsolutePath)
+	file, err := os.Open(m.FullPath)
 	if err != nil {
 		zap.L().Error("open file", zap.Error(err))
 		return
@@ -238,7 +240,7 @@ func (m *Medium) SumSHA256() {
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
-		zap.L().Error("read file", zap.Error(err))
+		zap.L().Info("read file", zap.Error(err))
 		return
 	}
 
@@ -250,22 +252,22 @@ func (m *Medium) PHash() error {
 		return nil
 	}
 
-	file, err := os.Open(m.AbsolutePath)
+	file, err := os.Open(m.FullPath)
 	if err != nil {
-		zap.L().Error("open file", zap.Error(err))
+		zap.L().Info("open file", zap.Error(err))
 		return err
 	}
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
 	if err != nil {
-		zap.L().Debug("image.Decode", zap.String("file", m.AbsolutePath), zap.Error(err))
+		zap.L().Info("image.Decode", zap.String("file", m.FullPath), zap.Error(err))
 		return err
 	}
 
 	hash, err := goimagehash.PerceptionHash(img)
 	if err != nil {
-		zap.L().Debug("goimagehash.PerceptionHash", zap.String("file", m.AbsolutePath), zap.Error(err))
+		zap.L().Info("goimagehash.PerceptionHash", zap.String("file", m.FullPath), zap.Error(err))
 		return err
 	}
 
@@ -304,18 +306,11 @@ func (m *Medium) sameImage(other *Medium) bool {
 	if m.ShootingTime() > 0 && other.ShootingTime() > 0 && m.ShootingTime() == other.ShootingTime() {
 		return true
 	}
-	//m.MagickWand()
-	//other.MagickWand()
-	//
-	//if m.mw != nil && other.mw != nil {
-	//	_, distortion := m.mw.CompareImages(other.mw, imagick.METRIC_PERCEPTUAL_HASH_ERROR)
-	//	logger.FileInfo("different image", zap.String("file1", m.AbsolutePath), zap.String("file2", other.AbsolutePath), zap.Float64("distortion", distortion))
-	//}
 
 	if m.PHash() == nil && other.PHash() == nil {
 		if dis, err := m.imageHash.Distance(other.imageHash); err == nil {
 			//if dis != 0 {
-			//	logger.Info("different image", zap.String("file1", m.AbsolutePath), zap.String("file2", other.AbsolutePath), zap.Int("distance", dis))
+			//	logger.Info("different image", zap.String("file1", m.FullPath), zap.String("file2", other.FullPath), zap.Int("distance", dis))
 			//}
 			return dis == 0
 		}

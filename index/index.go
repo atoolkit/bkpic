@@ -34,7 +34,7 @@ func NewIndex(dir string) (*Index, error) {
 	return index, nil
 }
 
-func (i *Index) walk(path string, info os.FileInfo, err error) error {
+func (idx *Index) walk(path string, info os.FileInfo, err error) error {
 	if err != nil {
 		return err
 	}
@@ -43,25 +43,35 @@ func (i *Index) walk(path string, info os.FileInfo, err error) error {
 		return nil
 	}
 
-	medium := NewMedium(path)
+	idx.Add(path)
+	return nil
+}
+
+func (idx *Index) Add(fullPath string) {
+	medium := NewMedium(fullPath)
 	if medium == nil {
-		return ErrInvalidMedium
+		//zap.L().Error("invalid medium", zap.String("file", fullPath))
+		return
 	}
 
-	hashes, ok := i.mediaBySize[info.Size()]
+	info := medium.FileInfo
+
+	hashes, ok := idx.mediaBySize[info.Size()]
 	if !ok {
 		hashes = make(Media, 0)
 	}
 
 	hashes = append(hashes, medium)
-	i.mediaBySize[info.Size()] = hashes
-	i.media[medium.AbsolutePath] = medium
-
-	return nil
+	idx.mediaBySize[info.Size()] = hashes
+	idx.media[medium.FullPath] = medium
 }
 
-func (idx *Index) AbsoluteDirectory() string {
+func (idx *Index) Directory() string {
 	return idx.dir
+}
+
+func (idx *Index) Get(fullPath string) *Medium {
+	return idx.media[fullPath]
 }
 
 func (idx *Index) Same(medium *Medium) *Medium {
@@ -73,7 +83,11 @@ func (idx *Index) Same(medium *Medium) *Medium {
 	return media.Same(medium)
 }
 
-func (idx *Index) InitializeMeta() error {
+func (idx *Index) Size() int {
+	return len(idx.media)
+}
+
+func (idx *Index) LoadMeta() error {
 
 	args := append(exiftoolFlags, idx.dir)
 	cmd := exec.Command("exiftool", args...)
@@ -89,7 +103,7 @@ func (idx *Index) InitializeMeta() error {
 	}
 
 	decoder := json.NewDecoder(stdout)
-	var meta []Meta
+	var meta []*Meta
 	if err := decoder.Decode(&meta); err != nil {
 		return err
 	}
@@ -104,11 +118,11 @@ func (idx *Index) InitializeMeta() error {
 	}
 
 	for _, m := range meta {
-		medium, ok := idx.media[m.Directory+"/"+m.FileName]
+		medium, ok := idx.media[m.SourceFile]
 		if !ok {
 			continue
 		}
-		medium.meta = &m
+		medium.meta = m
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
@@ -83,20 +84,25 @@ func Tidy(c *TidyConfig, inputs []string) error {
 	}
 	c.Output = absOutput
 
-	idx, err := index.NewIndex(absOutput)
+	outIdx, err := index.NewIndex(absOutput)
 	if err != nil {
 		return err
 	}
 
 	for _, in := range inputs {
-		input, err := filepath.Abs(in)
+		inIdx, err := index.NewIndex(in)
 		if err != nil {
-			zap.L().Error("invalid file path", zap.Error(err))
+			zap.L().Info("invalid input directory", zap.String("input", in), zap.Error(err))
 			continue
 		}
 
-		if err := doTidy(c, input, idx); err != nil {
-			zap.S().Warn(err, " in ", input)
+		if err := inIdx.LoadMeta(); err != nil {
+			zap.L().Info("invalid input directory", zap.String("input", in), zap.Error(err))
+			continue
+		}
+
+		if err := doTidy(c, inIdx, outIdx); err != nil {
+			zap.L().Info("failed to tidy", zap.String("input", in), zap.Error(err))
 		}
 	}
 	return nil
@@ -123,34 +129,11 @@ func checkOutput(output string) error {
 	return nil
 }
 
-func checkInput(src string) (string, error) {
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		return "", err
-	}
-	abs = filepath.ToSlash(abs)
-
-	fileInfo, err := os.Stat(abs)
-	if err != nil {
-		return "", err
-	}
-
-	if !fileInfo.IsDir() {
-		return "", fmt.Errorf("%s is not directory", src)
-	}
-
-	return abs, nil
-}
-
-func doTidy(c *TidyConfig, in string, idx *index.Index) error {
-	absIn, err := checkInput(in)
-	if err != nil {
-		return err
-	}
-
-	absOut := idx.AbsoluteDirectory()
-	if absIn == absOut {
-		return fmt.Errorf("input is same with output %s", absIn)
+func doTidy(c *TidyConfig, inIdx *index.Index, outIdx *index.Index) error {
+	inDir := inIdx.Directory()
+	outRootDir := outIdx.Directory()
+	if inDir == outRootDir {
+		return fmt.Errorf("input is same with output %s", inDir)
 	}
 
 	var count int
@@ -163,57 +146,71 @@ func doTidy(c *TidyConfig, in string, idx *index.Index) error {
 			return nil
 		}
 
-		src := index.NewMedium(path)
-		if src == nil {
+		src := inIdx.Get(path)
+		if src == nil || !src.Valid() {
 			zap.L().Info("invalid medium", zap.String("file", path))
 			return nil
 		}
 
-		same := idx.Same(src)
+		same := outIdx.Same(src)
 		if same != nil {
-			zap.L().Info("file already exists", zap.String("source", path), zap.String("same", same.AbsolutePath))
+			count++
+			zap.L().Debug("file already exists", zap.String("source", path), zap.String("same", same.FullPath))
 			return nil
 		}
 
-		if !src.Valid() {
-			return index.ErrInvalidMedium
-		}
-
-		out, outDir := getOutPath(src, absOut)
+		out, outDir := genOutPath(src, outRootDir)
 		if out == path {
 			return nil
 		}
 
-		zap.L().Info(fmt.Sprintf("%s\t=>\t%s", path, out))
-		for i := 1; i <= 10; i++ {
-			err = do(c, path, outDir, out)
-			if err == os.ErrExist {
+		for i := 1; i <= 9; i++ {
+			_, err := os.Stat(out)
+			if os.IsNotExist(err) {
+				// do nothing
+				if c.DryRun {
+					break
+				}
+				if err := os.MkdirAll(outDir, os.FileMode(0700)); err != nil {
+					zap.L().Info("failed to make directory", zap.Error(err), zap.String("directory", outDir))
+					return nil
+				}
+				if c.Move {
+					if err := syscall.Rename(path, out); err != nil {
+						zap.L().Info("failed to move file", zap.Error(err), zap.String("source", path), zap.String("target", out))
+						return nil
+					}
+				} else {
+					if err := fs.Copy(path, out); err != nil {
+						zap.L().Info("failed to copy file", zap.Error(err), zap.String("source", path), zap.String("target", out))
+						return nil
+					}
+				}
+				outIdx.Add(out)
+			} else if os.IsExist(err) {
 				ext := filepath.Ext(out)
 				out = strings.TrimSuffix(out, ext) + fmt.Sprintf("_%d", i) + ext
 				continue
-			} else {
-				break
+			} else if err != nil {
+				zap.L().Info("failed to get file info", zap.Error(err), zap.String("file", out))
+				return nil
 			}
 		}
 
-		if err != nil {
-			zap.S().Warn(err, " in ", path)
-		} else {
-			count++
-		}
-
+		zap.L().Info(fmt.Sprintf("%s\t=>\t%s", path, out))
+		count++
 		return nil
 	}
 
-	if err := filepath.Walk(absIn, walk); err != nil {
+	if err := filepath.Walk(inDir, walk); err != nil {
 		return err
 	}
 
-	zap.S().Infof("已完成。总文件：%d，成功：%d", len(files), count)
+	zap.S().Infof("已完成。总文件：%d，成功：%d", inIdx.Size(), count)
 	return nil
 }
 
-func getOutPath(src *index.Medium, absTgt string) (string, string) {
+func genOutPath(src *index.Medium, absTgt string) (string, string) {
 	if src.ShootingTime() <= 0 {
 		return "", ""
 	}
@@ -237,36 +234,6 @@ func getOutPath(src *index.Medium, absTgt string) (string, string) {
 	//		}
 	//	}
 	//}
-	tgtPath := tgtDir + "/" + src.Base
+	tgtPath := tgtDir + "/" + src.FileInfo.Name()
 	return absTgt + "/" + tgtPath, absTgt + "/" + tgtDir
-}
-
-func do(c *TidyConfig, src, outDir, out string) error {
-	_, err := os.Stat(out)
-	// 目标文件不存在，直接移动
-	if os.IsNotExist(err) {
-		if c.DryRun {
-			return nil
-		}
-
-		if err := os.MkdirAll(outDir, os.FileMode(0700)); err != nil {
-			return err
-		}
-
-		if c.Move {
-
-			return fs.Move(src, out)
-		}
-
-		return fs.Copy(src, out)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	if c.Move && !c.DryRun {
-		_ = os.Remove(src)
-	}
-	return nil
 }

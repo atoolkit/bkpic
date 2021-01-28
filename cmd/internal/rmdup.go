@@ -19,11 +19,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var files = make(map[int64][]*index.Medium)
-
-func init() {
-}
-
 type config struct {
 	Path2rm map[string]bool
 }
@@ -46,6 +41,7 @@ func Rmdup(v *viper.Viper, args []string) error {
 		}
 	}
 
+	var files = make(map[int64][]*index.Medium)
 	keys := make([]int, 0)
 	for k, hashes := range files {
 		if len(hashes) > 1 {
@@ -72,10 +68,10 @@ func Rmdup(v *viper.Viper, args []string) error {
 				if first.Same(hashes[j]) {
 					// 加入第一个
 					if len(same) <= 0 {
-						same = append(same, first.AbsolutePath)
+						same = append(same, first.FullPath)
 					}
 
-					same = append(same, other.AbsolutePath)
+					same = append(same, other.FullPath)
 				}
 			}
 
@@ -97,7 +93,7 @@ func logDupFiles(hashes []*index.Medium) {
 	buf := bytes.NewBufferString("")
 	for _, v := range hashes {
 		buf.WriteString("#rm \"")
-		buf.WriteString(v.AbsolutePath)
+		buf.WriteString(v.FullPath)
 		buf.WriteString("\"\n")
 	}
 	fmt.Println(buf.String())
@@ -162,26 +158,5 @@ func logRM(files []string, cfg *config) {
 }
 
 func walk(path string, info os.FileInfo, err error) error {
-	if err != nil {
-		return err
-	}
-
-	if info.IsDir() || info.Size() <= 0 {
-		return nil
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return err
-	}
-
-	hashes, ok := files[info.Size()]
-	if !ok {
-		hashes = make([]*index.Medium, 0)
-	}
-
-	hashes = append(hashes, &index.Medium{AbsolutePath: absPath, FileInfo: info})
-	files[info.Size()] = hashes
-
 	return nil
 }

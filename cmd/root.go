@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return run(rootViper)
+		return cmd.Help()
 	},
 	SilenceErrors: true,
 	SilenceUsage:  true,
@@ -47,9 +47,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config.file", "c", "", "config file")
 
 	rootCmd.PersistentFlags().StringVar(&configType, "config.type", "yaml", "the type of config format")
-	rootCmd.PersistentFlags().BoolP("verbose", "V", false, "verbose")
 
-	rootCmd.PersistentFlags().StringVar(&logLevel, "log.level", "debug", "level of zap")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log.level", "info", "level of zap")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
