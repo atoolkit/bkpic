@@ -1,4 +1,4 @@
-package internal
+package tidy
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -23,7 +22,7 @@ type config struct {
 	Path2rm map[string]bool
 }
 
-func Rmdup(v *viper.Viper, args []string) error {
+func Run(v *viper.Viper, args []string) error {
 	var cfg config
 
 	f, err := os.Open("rmdup.yaml")
@@ -35,13 +34,15 @@ func Rmdup(v *viper.Viper, args []string) error {
 	} else {
 		zap.L().Error(err.Error())
 	}
+
+	idx := index.NewEmptyIndex()
 	for _, arg := range args {
-		if err := filepath.Walk(arg, walk); err != nil {
+		if err := idx.Walk(arg); err != nil {
 			return err
 		}
 	}
 
-	var files = make(map[int64][]*index.Medium)
+	files := idx.GetMediaBySize()
 	keys := make([]int, 0)
 	for k, hashes := range files {
 		if len(hashes) > 1 {

@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"github.com/enjoypi/bkpic/cmd/internal"
+	"github.com/enjoypi/bkpic/cmd/internal/tidy"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 // doCmd represents the do command
@@ -13,28 +11,12 @@ var tidyCmd = &cobra.Command{
 	Short:   "tidy media to output directory",
 	PreRunE: preRunE,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return tidy(rootViper, args)
+		return tidy.Run(rootViper, args)
 	},
 	Args: cobra.MinimumNArgs(1),
 }
 
 func init() {
 	rootCmd.AddCommand(tidyCmd)
-	flags := tidyCmd.Flags()
-	flags.BoolP("dry-run", "n", false, "perform a trial run with no changes made")
-	flags.BoolP("move", "m", false, "move")
-	flags.StringP("output", "o", "", "the output directory")
 
-	_ = tidyCmd.MarkFlagRequired("output")
-}
-
-func tidy(v *viper.Viper, args []string) error {
-	var c internal.TidyConfig
-	if err := v.Unmarshal(&c); err != nil {
-		return err
-	}
-
-	zap.S().Infof("settings on tidy: %+v", c)
-	zap.S().Info("args: ", args)
-	return internal.Tidy(&c, args)
 }

@@ -35,7 +35,7 @@ var rootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		zap.L().Fatal(err.Error())
+		zap.L().Info(err.Error())
 	}
 }
 
@@ -53,6 +53,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	rootCmd.Flags().Bool("version", false, "show version")
+	rootCmd.Flags().BoolP("dry-run", "n", false, "perform a trial run with no changes made")
 }
 
 func preRunE(cmd *cobra.Command, args []string) error {

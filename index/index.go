@@ -15,23 +15,33 @@ type Index struct {
 	dir         string
 }
 
-func NewIndex(dir string) (*Index, error) {
-	var err error
-	dir, err = filepath.Abs(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	index := &Index{
-		dir:         dir,
+func NewEmptyIndex() *Index {
+	return &Index{
 		mediaBySize: make(map[int64]Media),
 		media:       make(map[string]*Medium),
 	}
+}
 
-	if err := filepath.Walk(dir, index.walk); err != nil {
+func NewIndex(dir string) (*Index, error) {
+	idx := NewEmptyIndex()
+	if err := idx.Walk(dir); err != nil {
 		return nil, err
 	}
-	return index, nil
+	idx.dir = dir
+	return idx, nil
+}
+
+func (idx *Index) Walk(dir string) error {
+	var err error
+	dir, err = filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+
+	if err := filepath.Walk(dir, idx.walk); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (idx *Index) walk(path string, info os.FileInfo, err error) error {
@@ -72,6 +82,10 @@ func (idx *Index) Directory() string {
 
 func (idx *Index) Get(fullPath string) *Medium {
 	return idx.media[fullPath]
+}
+
+func (idx *Index) GetMediaBySize() map[int64]Media {
+	return idx.mediaBySize
 }
 
 func (idx *Index) Same(medium *Medium) *Medium {

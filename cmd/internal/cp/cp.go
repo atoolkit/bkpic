@@ -1,4 +1,4 @@
-package internal
+package cp
 
 import (
 	"fmt"
@@ -73,7 +73,7 @@ var (
 	}
 )
 
-func Tidy(c *TidyConfig, inputs []string) error {
+func Run(c *TidyConfig, inputs []string) error {
 	absOutput, err := filepath.Abs(c.Output)
 	if err != nil {
 		return err
