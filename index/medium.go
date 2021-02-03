@@ -36,12 +36,15 @@ type Meta struct {
 	FileModifyDate int64 `json:"File:FileModifyDate"` // third
 	FileCreateDate int64 `json:"File:FileCreateDate"` // third
 	//FileName       string `json:"File:FileName"`
-	FileType string `json:"File:FileType"`
-	MIMEType string `json:"File:MIMEType"`
+	FileType    string `json:"File:FileType"`
+	ImageHeight int64  `json:"File:ImageHeight"`
+	ImageWidth  int64  `json:"File:ImageWidth"`
+	MIMEType    string `json:"File:MIMEType"`
 
 	EXIFCreateDate       int64  `json:"EXIF:CreateDate"` // second
 	EXIFModifyDate       int64  `json:"EXIF:ModifyDate"`
 	DateTimeOriginal     int64  `json:"EXIF:DateTimeOriginal"`     // first
+	Model                string `json:"EXIF:Model"`                //  camera model
 	H264DateTimeOriginal int64  `json:"H264:DateTimeOriginal"`     // DateTime for h264
 	QTDateTime           int64  `json:"QuickTime:MediaCreateDate"` // DateTime for QuickTime
 	XMPPhotoId           string `json:"XMP:PhotoId"`
@@ -303,8 +306,13 @@ func (m *Medium) Same(other *Medium) bool {
 }
 
 func (m *Medium) sameImage(other *Medium) bool {
-	if m.ShootingTime() > 0 && other.ShootingTime() > 0 && m.ShootingTime() == other.ShootingTime() {
+
+	if m.sameMeta(other) {
 		return true
+	}
+
+	if !strings.HasPrefix(m.meta.MIMEType, imagePrefix) {
+		return false
 	}
 
 	if m.PHash() == nil && other.PHash() == nil {
@@ -314,6 +322,22 @@ func (m *Medium) sameImage(other *Medium) bool {
 			//}
 			return dis == 0
 		}
+	}
+	return false
+}
+
+func (m *Medium) sameMeta(other *Medium) bool {
+	meta := m.Meta()
+	otherMeta := other.Meta()
+	if meta == nil || otherMeta == nil {
+		return false
+	}
+
+	if meta.Model != "" && meta.Model == otherMeta.Model &&
+		meta.ImageHeight > 0 && meta.ImageHeight == otherMeta.ImageHeight &&
+		meta.ImageWidth > 0 && meta.ImageWidth == otherMeta.ImageWidth &&
+		m.ShootingTime() > 0 && m.ShootingTime() == other.ShootingTime() {
+		return true
 	}
 	return false
 }

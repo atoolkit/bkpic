@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const configFile = "bkpic.yaml"
+
 type config struct {
 	Path2rm map[string]bool
 }
@@ -25,14 +27,14 @@ type config struct {
 func Run(v *viper.Viper, args []string) error {
 	var cfg config
 
-	f, err := os.Open("rmdup.yaml")
+	f, err := os.Open(configFile)
 	if err == nil {
 		d := yaml.NewDecoder(f)
 		if err := d.Decode(&cfg); err != nil {
 			zap.L().Error(err.Error())
 		}
 	} else {
-		zap.L().Error(err.Error())
+		zap.L().Info(configFile, zap.Error(err))
 	}
 
 	idx := index.NewEmptyIndex()
@@ -54,7 +56,7 @@ func Run(v *viper.Viper, args []string) error {
 	//sort.Sort(sort.Reverse(sort.IntSlice(keys)))
 
 	m := gojob.NewManager(int64(runtime.GOMAXPROCS(0)))
-	for i := 0; i < len(keys); i++ {
+	for i := len(keys) - 1; i >= 0; i-- {
 		values := context.WithValue(m.Context, "size", int64(keys[i]))
 		m.Go(func(ctx context.Context, id gojob.TaskID) error {
 			size := ctx.Value("size").(int64)
@@ -156,8 +158,4 @@ func logRM(files []string, cfg *config) {
 	}
 
 	fmt.Println(buf.String())
-}
-
-func walk(path string, info os.FileInfo, err error) error {
-	return nil
 }
