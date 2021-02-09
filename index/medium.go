@@ -15,7 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/corona10/goimagehash"
+	"github.com/restic/chunker"
 	"go.uber.org/zap"
 )
 
@@ -27,6 +30,7 @@ const (
 
 var (
 	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-G", "-j", "-L", "-q", "-r", "-sort"}
+	pol           = chunker.Pol(0x3DA3358B4DC173)
 	validDataTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
 )
 
@@ -65,6 +69,7 @@ type Medium struct {
 	FullPath string
 	os.FileInfo
 	imageHash *goimagehash.ImageHash
+	chunks    [][]byte
 }
 
 func NewMedium(filename string) *Medium {
@@ -340,4 +345,37 @@ func (m *Medium) sameMeta(other *Medium) bool {
 		return true
 	}
 	return false
+}
+
+func (m *Medium) sumChunk() {
+	if m.chunks != nil {
+		return
+	}
+
+	file, err := os.Open(m.FullPath)
+	if err != nil {
+		zap.L().Info("open file", zap.Error(err))
+		return
+	}
+	defer file.Close()
+
+	c := chunker.New(file, pol)
+
+	buf := make([]byte, chunker.MaxSize)
+	m.chunks = make([][]byte, 0)
+	for {
+		chunk, err := c.Next(buf)
+		if errors.Cause(err) == io.EOF {
+			break
+		}
+
+		if err != nil {
+			//t.Fatalf("unable to save chunk in repo: %v", err)
+		}
+
+		h := sha256.New()
+
+		id := h.Sum(chunk.Data)
+		m.chunks = append(m.chunks, id)
+	}
 }
