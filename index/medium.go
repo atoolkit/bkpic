@@ -3,6 +3,7 @@ package index
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"hash/adler32"
 	"image"
 	_ "image/gif"
@@ -15,9 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/corona10/goimagehash"
+	"github.com/pkg/errors"
 	"github.com/restic/chunker"
 	"go.uber.org/zap"
 )
@@ -69,7 +69,7 @@ type Medium struct {
 	FullPath string
 	os.FileInfo
 	imageHash *goimagehash.ImageHash
-	chunks    [][]byte
+	chunks    []string
 }
 
 func NewMedium(filename string) *Medium {
@@ -134,6 +134,15 @@ func (m *Medium) Valid() bool {
 
 	return strings.HasPrefix(m.meta.MIMEType, imagePrefix) ||
 		strings.HasPrefix(m.meta.MIMEType, videoPrefix)
+}
+
+func (m *Medium) IsImage() bool {
+	meta := m.Meta()
+	if meta == nil {
+		return false
+	}
+
+	return strings.HasPrefix(meta.MIMEType, imagePrefix)
 }
 
 func (m *Medium) ShootingTime() int64 {
@@ -293,21 +302,29 @@ func (m *Medium) Same(other *Medium) bool {
 	other.SumAdler32()
 
 	if m.Adler32 != other.Adler32 {
-		return m.sameImage(other)
+		return m.same(other)
 	}
 
 	m.SumSHA256()
 	other.SumSHA256()
 	if len(m.SHA256) != len(other.SHA256) {
-		return m.sameImage(other)
+		return m.same(other)
 	}
 
 	for i := 0; i < len(m.SHA256); i++ {
 		if m.SHA256[i] != other.SHA256[i] {
-			return m.sameImage(other)
+			return m.same(other)
 		}
 	}
 	return true
+}
+
+func (m *Medium) same(other *Medium) bool {
+	if m.IsImage() {
+		return m.sameImage(other)
+	}
+
+	return m.sameChunk(other)
 }
 
 func (m *Medium) sameImage(other *Medium) bool {
@@ -347,6 +364,22 @@ func (m *Medium) sameMeta(other *Medium) bool {
 	return false
 }
 
+func (m *Medium) sameChunk(other *Medium) bool {
+	m.sumChunk()
+	other.sumChunk()
+
+	if len(m.chunks) != len(other.chunks) {
+		return false
+	}
+
+	for i, chunk := range m.chunks {
+		if chunk != other.chunks[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *Medium) sumChunk() {
 	if m.chunks != nil {
 		return
@@ -362,7 +395,7 @@ func (m *Medium) sumChunk() {
 	c := chunker.New(file, pol)
 
 	buf := make([]byte, chunker.MaxSize)
-	m.chunks = make([][]byte, 0)
+	chunks := make([]string, 0)
 	for {
 		chunk, err := c.Next(buf)
 		if errors.Cause(err) == io.EOF {
@@ -370,12 +403,12 @@ func (m *Medium) sumChunk() {
 		}
 
 		if err != nil {
-			//t.Fatalf("unable to save chunk in repo: %v", err)
+			zap.L().Info("sum chunk", zap.Error(err))
+			return
 		}
 
-		h := sha256.New()
-
-		id := h.Sum(chunk.Data)
-		m.chunks = append(m.chunks, id)
+		id := fmt.Sprintf("%x", sha256.Sum256(chunk.Data))
+		chunks = append(chunks, id)
 	}
+	m.chunks = chunks
 }
