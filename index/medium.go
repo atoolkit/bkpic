@@ -394,9 +394,9 @@ func (m *Medium) sumChunk() {
 
 	c := chunker.New(file, pol)
 
-	buf := make([]byte, chunker.MaxSize)
 	chunks := make([]string, 0)
 	for {
+		buf := make([]byte, chunker.MaxSize)
 		chunk, err := c.Next(buf)
 		if errors.Cause(err) == io.EOF {
 			break
@@ -411,4 +411,7 @@ func (m *Medium) sumChunk() {
 		chunks = append(chunks, id)
 	}
 	m.chunks = chunks
+	zap.L().Debug("sum chunks",
+		zap.String("file", m.FullPath),
+		zap.Strings("chunks", chunks))
 }
