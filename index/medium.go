@@ -1,6 +1,8 @@
 package index
 
 import (
+	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -15,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/enjoypi/gobsdiff/wrapper"
 
 	"github.com/corona10/goimagehash"
 	"github.com/pkg/errors"
@@ -365,19 +369,70 @@ func (m *Medium) sameMeta(other *Medium) bool {
 }
 
 func (m *Medium) sameChunk(other *Medium) bool {
-	m.sumChunk()
-	other.sumChunk()
+	file, err := os.Open(m.FullPath)
+	if err != nil {
+		zap.L().Info("open file", zap.Error(err))
+		return false
+	}
+	defer file.Close()
 
-	if len(m.chunks) != len(other.chunks) {
+	ofile, err := os.Open(other.FullPath)
+	if err != nil {
+		zap.L().Info("open file", zap.Error(err))
+		return false
+	}
+	defer ofile.Close()
+
+	lhs := bufio.NewReader(file)
+	rhs := bufio.NewReader(ofile)
+	patch := new(bytes.Buffer)
+
+	zap.L().Debug("start bsdiff")
+	//if err := bsdiff.Reader(lhs, rhs, patch); err != nil {
+	if err := wrapper.Diff(lhs, rhs, patch); err != nil {
+		zap.L().Debug("bsdiff error", zap.Error(err))
 		return false
 	}
 
-	for i, chunk := range m.chunks {
-		if chunk != other.chunks[i] {
-			return false
-		}
-	}
-	return true
+	//var same float64
+	//for {
+	//	lb, lerr := lhs.ReadByte()
+	//	if lerr != nil {
+	//		break
+	//	}
+	//
+	//	rb, rerr := rhs.ReadByte()
+	//	if rerr != nil {
+	//		break
+	//	}
+	//
+	//	if lb == rb {
+	//		same++
+	//	}
+	//}
+	//m.sumChunk()
+	//other.sumChunk()
+	//
+	//if len(m.chunks) != len(other.chunks) {
+	//	return false
+	//}
+	//
+	//for i, chunk := range m.chunks {
+	//	if chunk != other.chunks[i] {
+	//		return false
+	//	}
+	//}
+	diff := float64(patch.Len()) / (float64(m.FileInfo.Size()))
+	zap.L().Debug("sameChunk",
+		zap.String("lhs", m.FullPath),
+		zap.String("rhs", other.FullPath),
+		zap.Int64("size", m.FileInfo.Size()),
+		//zap.Float64("same", same/(float64(m.FileInfo.Size()))),
+		zap.Int("patch size", patch.Len()),
+		zap.Float64("diff", diff),
+	)
+	//return same/float64(m.FileInfo.Size()) > 0.8
+	return diff < 0.2
 }
 
 func (m *Medium) sumChunk() {
