@@ -22,6 +22,7 @@ const configFile = "bkpic.yaml"
 
 type config struct {
 	Path2rm map[string]bool
+	Ignored map[string]bool
 }
 
 func Run(v *viper.Viper, args []string) error {
@@ -39,7 +40,8 @@ func Run(v *viper.Viper, args []string) error {
 
 	idx := index.NewEmptyIndex()
 	for _, arg := range args {
-		if err := idx.Walk(arg); err != nil {
+
+		if err := idx.Walk(arg, cfg.Ignored); err != nil {
 			return err
 		}
 	}

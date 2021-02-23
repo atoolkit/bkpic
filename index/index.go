@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 )
@@ -13,6 +14,7 @@ type Index struct {
 	mediaBySize map[int64]Media
 	media       map[string]*Medium
 	dir         string
+	ignored     map[string]bool
 }
 
 func NewEmptyIndex() *Index {
@@ -24,20 +26,21 @@ func NewEmptyIndex() *Index {
 
 func NewIndex(dir string) (*Index, error) {
 	idx := NewEmptyIndex()
-	if err := idx.Walk(dir); err != nil {
+	if err := idx.Walk(dir, nil); err != nil {
 		return nil, err
 	}
 	idx.dir = dir
 	return idx, nil
 }
 
-func (idx *Index) Walk(dir string) error {
+func (idx *Index) Walk(dir string, ignored map[string]bool) error {
 	var err error
 	dir, err = filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
 
+	idx.ignored = ignored
 	if err := filepath.Walk(dir, idx.walk); err != nil {
 		return err
 	}
@@ -51,6 +54,13 @@ func (idx *Index) walk(path string, info os.FileInfo, err error) error {
 
 	if info.IsDir() || info.Size() <= 0 {
 		return nil
+	}
+
+	pp := strings.Split(path, "/")
+	for _, p := range pp[1:] {
+		if _, ok := idx.ignored[p]; ok {
+			return nil
+		}
 	}
 
 	idx.Add(path)
