@@ -19,19 +19,18 @@ import (
 	"github.com/corona10/goimagehash"
 	"github.com/enjoypi/gordiff/wrapper"
 	"github.com/icedream/go-bsdiff"
-	"github.com/restic/chunker"
 	"go.uber.org/zap"
 )
 
 const (
 	sizeForAdler32 = 4096
+	audioPrefix    = "audio/"
 	imagePrefix    = "image/"
 	videoPrefix    = "video/"
 )
 
 var (
 	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-G", "-j", "-L", "-q", "-r", "-sort"}
-	pol           = chunker.Pol(0x3DA3358B4DC173)
 	validDataTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
 )
 
@@ -133,17 +132,9 @@ func (m *Medium) Valid() bool {
 		return false
 	}
 
-	return strings.HasPrefix(m.meta.MIMEType, imagePrefix) ||
+	return strings.HasPrefix(m.meta.MIMEType, audioPrefix) ||
+		strings.HasPrefix(m.meta.MIMEType, imagePrefix) ||
 		strings.HasPrefix(m.meta.MIMEType, videoPrefix)
-}
-
-func (m *Medium) IsImage() bool {
-	meta := m.Meta()
-	if meta == nil {
-		return false
-	}
-
-	return strings.HasPrefix(meta.MIMEType, imagePrefix)
 }
 
 func (m *Medium) ShootingTime() int64 {
@@ -279,7 +270,9 @@ func (m *Medium) PHash() error {
 
 	img, _, err := image.Decode(file)
 	if err != nil {
-		zap.L().Info("image.Decode", zap.String("file", m.FullPath), zap.Error(err))
+		zap.L().Info("image.Decode",
+			zap.String("mime", m.meta.MIMEType),
+			zap.String("file", m.FullPath), zap.Error(err))
 		return err
 	}
 
@@ -321,7 +314,11 @@ func (m *Medium) Same(other *Medium) bool {
 }
 
 func (m *Medium) same(other *Medium) bool {
-	if m.IsImage() {
+	if !m.Valid() {
+		return false
+	}
+
+	if strings.HasPrefix(m.meta.MIMEType, imagePrefix) {
 		return m.sameImage(other)
 	}
 
@@ -334,7 +331,15 @@ func (m *Medium) sameImage(other *Medium) bool {
 		return true
 	}
 
+	if m.meta == nil || other.meta == nil {
+		return false
+	}
+
 	if !strings.HasPrefix(m.meta.MIMEType, imagePrefix) {
+		return false
+	}
+
+	if !strings.HasPrefix(other.meta.MIMEType, imagePrefix) {
 		return false
 	}
 
@@ -373,7 +378,13 @@ func (m *Medium) sameChunk(other *Medium) bool {
 	if m.signFile != "" {
 		if deltaPath, err := wrapper.RSDelta(m.FullPath, m.signFile, other.FullPath); err == nil {
 			if stat, err := os.Stat(deltaPath); err == nil {
-				return float64(stat.Size())/float64(m.FileInfo.Size()) < 0.4
+				ratio := float64(stat.Size()) / float64(m.FileInfo.Size())
+				if ratio <= 0.1001 {
+					return true
+				} else if ratio > 0.5 {
+					return false
+				}
+				// others to bsdiff
 			}
 		}
 	}
@@ -438,5 +449,5 @@ func (m *Medium) sameChunk(other *Medium) bool {
 		zap.Float64("diff", diff),
 	)
 	//return same/float64(m.FileInfo.Size()) > 0.8
-	return diff < 0.2
+	return diff <= 0.2001
 }
