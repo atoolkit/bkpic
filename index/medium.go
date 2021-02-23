@@ -1,11 +1,9 @@
 package index
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"hash/adler32"
 	"image"
 	_ "image/gif"
@@ -18,10 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/enjoypi/gobsdiff/wrapper"
-
 	"github.com/corona10/goimagehash"
-	"github.com/pkg/errors"
+	"github.com/enjoypi/gordiff/wrapper"
+	"github.com/icedream/go-bsdiff"
 	"github.com/restic/chunker"
 	"go.uber.org/zap"
 )
@@ -73,7 +70,7 @@ type Medium struct {
 	FullPath string
 	os.FileInfo
 	imageHash *goimagehash.ImageHash
-	chunks    []string
+	signFile  string
 }
 
 func NewMedium(filename string) *Medium {
@@ -369,6 +366,18 @@ func (m *Medium) sameMeta(other *Medium) bool {
 }
 
 func (m *Medium) sameChunk(other *Medium) bool {
+	if m.signFile == "" {
+		m.signFile, _ = wrapper.RSSig(m.FullPath)
+	}
+
+	if m.signFile != "" {
+		if deltaPath, err := wrapper.RSDelta(m.FullPath, m.signFile, other.FullPath); err == nil {
+			if stat, err := os.Stat(deltaPath); err == nil {
+				return float64(stat.Size())/float64(m.FileInfo.Size()) < 0.4
+			}
+		}
+	}
+
 	file, err := os.Open(m.FullPath)
 	if err != nil {
 		zap.L().Info("open file", zap.Error(err))
@@ -383,13 +392,10 @@ func (m *Medium) sameChunk(other *Medium) bool {
 	}
 	defer ofile.Close()
 
-	lhs := bufio.NewReader(file)
-	rhs := bufio.NewReader(ofile)
 	patch := new(bytes.Buffer)
 
 	zap.L().Debug("start bsdiff")
-	//if err := bsdiff.Reader(lhs, rhs, patch); err != nil {
-	if err := wrapper.Diff(lhs, rhs, patch); err != nil {
+	if err := bsdiff.Diff(file, ofile, patch); err != nil {
 		zap.L().Debug("bsdiff error", zap.Error(err))
 		return false
 	}
@@ -433,40 +439,4 @@ func (m *Medium) sameChunk(other *Medium) bool {
 	)
 	//return same/float64(m.FileInfo.Size()) > 0.8
 	return diff < 0.2
-}
-
-func (m *Medium) sumChunk() {
-	if m.chunks != nil {
-		return
-	}
-
-	file, err := os.Open(m.FullPath)
-	if err != nil {
-		zap.L().Info("open file", zap.Error(err))
-		return
-	}
-	defer file.Close()
-
-	c := chunker.New(file, pol)
-
-	chunks := make([]string, 0)
-	for {
-		buf := make([]byte, chunker.MaxSize)
-		chunk, err := c.Next(buf)
-		if errors.Cause(err) == io.EOF {
-			break
-		}
-
-		if err != nil {
-			zap.L().Info("sum chunk", zap.Error(err))
-			return
-		}
-
-		id := fmt.Sprintf("%x", sha256.Sum256(chunk.Data))
-		chunks = append(chunks, id)
-	}
-	m.chunks = chunks
-	zap.L().Debug("sum chunks",
-		zap.String("file", m.FullPath),
-		zap.Strings("chunks", chunks))
 }

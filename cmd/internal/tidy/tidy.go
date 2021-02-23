@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -51,11 +52,8 @@ func Run(v *viper.Viper, args []string) error {
 		}
 	}
 	sort.Ints(keys)
-	//reverse(keys)
-	//sort.Sort(sort.Reverse(sort.IntSlice(keys)))
 
-	//m := gojob.NewManager(int64(runtime.GOMAXPROCS(0)))
-	m := gojob.NewManager(1)
+	m := gojob.NewManager(int64(runtime.GOMAXPROCS(0)))
 	for i := len(keys) - 1; i >= 0; i-- {
 		values := context.WithValue(m.Context, "size", int64(keys[i]))
 		m.Go(func(ctx context.Context, id gojob.TaskID) error {
@@ -66,8 +64,6 @@ func Run(v *viper.Viper, args []string) error {
 			same := sameMedia(media)
 			if len(same) > 0 {
 				logRM(same, &cfg)
-			} else {
-				logDupFiles(media)
 			}
 			return nil
 		}, values, nil)
@@ -80,6 +76,7 @@ func Run(v *viper.Viper, args []string) error {
 
 func sameMedia(media index.Media) []string {
 	same := make([]string, 0)
+	var found bool
 	for i := 0; i < len(media)-1; i++ {
 		lhs := media[i]
 		for j := i + 1; j < len(media); j++ {
@@ -87,11 +84,17 @@ func sameMedia(media index.Media) []string {
 			if os.SameFile(lhs.FileInfo, rhs.FileInfo) {
 				continue
 			}
+
 			if lhs.Same(rhs) {
-				same = append(same, lhs.FullPath)
+				if !found {
+					same = append(same, lhs.FullPath)
+					found = true
+				}
 				same = append(same, rhs.FullPath)
-				return same
 			}
+		}
+		if found {
+			break
 		}
 	}
 
