@@ -59,7 +59,8 @@ type Meta struct {
 
 type Medium struct {
 	// meta info by exiftool
-	meta *Meta
+	meta     *Meta
+	metaDone bool
 
 	//
 	//ShootingTime     time.Time
@@ -87,13 +88,14 @@ func NewMedium(filename string) *Medium {
 }
 
 func (m *Medium) Meta() *Meta {
-	if m.meta != nil {
+	if m.metaDone {
 		return m.meta
 	}
+	// just do once
+	m.metaDone = true
 
 	args := append(exiftoolFlags, m.FullPath)
 	cmd := exec.Command("exiftool", args...)
-	zap.L().Debug(cmd.String())
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

@@ -49,7 +49,10 @@ func (idx *Index) Walk(dir string, ignored map[string]bool) error {
 
 func (idx *Index) walk(path string, info os.FileInfo, err error) error {
 	if err != nil {
-		return err
+		zap.L().Debug("invalid path",
+			zap.Error(err),
+			zap.String("path", path))
+		return nil
 	}
 
 	if info.IsDir() || info.Size() <= 0 {
