@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	exiftoolFlags = []string{"-a", "-charset", "FileName=UTF8", "-d", "%s", "-ee", "--ext", "json", "-G", "-j", "-L", "-q", "-r", "-sort"}
+	exiftoolFlags = []string{"-a", "-charset", "filename=UTF8", "-d", "%s", "-ee", "--ext", "json", "-G", "-j", "-L", "-q", "-r", "-sort"}
 	validDataTime = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
 )
 
@@ -55,6 +55,10 @@ type Meta struct {
 
 	GPSLatitude  string `json:"Composite:GPSLatitude"`
 	GPSLongitude string `json:"Composite:GPSLongitude"`
+
+	// ExifTool Error
+	ExifToolError   string `json:"ExifTool:Error"`
+	ExifToolWarning string `json:"ExifTool:Warning"`
 }
 
 type Medium struct {
@@ -94,38 +98,44 @@ func (m *Medium) Meta() *Meta {
 	// just do once
 	m.metaDone = true
 
+	if m.FileInfo.IsDir() || m.FileInfo.Size() <= 0 {
+		return nil
+	}
+
 	args := append(exiftoolFlags, m.FullPath)
 	cmd := exec.Command("exiftool", args...)
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		zap.L().Error(err.Error())
+	out, err := cmd.CombinedOutput()
+	if len(out) <= 0 {
+		zap.L().Info("exiftool err",
+			zap.Error(err),
+			zap.String("file", m.FullPath))
 		return nil
 	}
 
-	if err := cmd.Start(); err != nil {
-		zap.L().Error(err.Error())
-		return nil
-	}
-
-	decoder := json.NewDecoder(stdout)
+	decoder := json.NewDecoder(bytes.NewBuffer(out))
 	var meta []*Meta
 	if err := decoder.Decode(&meta); err != nil {
-		zap.L().Error(err.Error())
-		return nil
-	}
-
-	if err := cmd.Wait(); err != nil {
-		zap.L().Error(err.Error())
+		zap.L().Debug(string(out),
+			zap.Error(err),
+			zap.String("file", m.FullPath))
 		return nil
 	}
 
 	if len(meta) <= 0 {
-		zap.L().Info("invalid meta", zap.String("file", m.FullPath))
+		zap.L().Debug("invalid meta", zap.String("file", m.FullPath))
 		return nil
 	}
 
-	m.meta = meta[0]
+	mt := meta[0]
+	if mt.ExifToolError != "" {
+		zap.L().Debug(mt.ExifToolError,
+			zap.String("detail", mt.ExifToolWarning),
+			zap.String("file", m.FullPath))
+		return nil
+	}
+
+	m.meta = mt
 	return m.meta
 }
 
